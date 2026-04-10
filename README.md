@@ -1,86 +1,68 @@
-# ElectionChain
 🗳️ ElectionChain — Blockchain Based Secure Voting System
 📌 Project Overview
 
-ElectionChain is a secure blockchain-based digital voting platform designed to ensure transparency, integrity, and voter authentication in elections.
+ElectionChain is a secure, blockchain-powered digital voting platform designed to ensure transparency, integrity, and voter authentication in elections.
+The system integrates OTP authentication, face verification, and blockchain recording to prevent fraud, duplicate voting, and unauthorized access.
 
-The system integrates multiple security layers including OTP authentication, face verification, backend validation, and blockchain recording to prevent fraud, duplicate voting, and unauthorized access.
-
-Votes are recorded as blockchain transactions using smart contract logic, making election records tamper-proof, transparent, and verifiable.
-
-The project follows a modern MVC backend architecture with a lightweight frontend interface and a blockchain layer that guarantees immutable vote storage.
+The platform follows a modern MVC backend architecture with a lightweight frontend interface and a smart contract deployed on blockchain to guarantee tamper-proof vote storage.
 
 🏗️ System Architecture
-
-The application follows a layered architecture where responsibilities are separated between frontend, backend services, database, and blockchain.
-
 Browser (Frontend)
 │
-├── demo.html                → Voter interface
-├── admin-dashboard.html     → Admin control panel
+├── demo.html (Voter Interface)
+├── admin-dashboard.html (Admin Panel)
 │
 ▼
 Node.js Backend (MVC Architecture)
 │
-├── Routes       → API endpoints
-├── Controllers  → Business logic
-├── Models       → Database schemas
-├── Middleware   → Authentication & validation
-├── Services     → Logging & utilities
+├── Routes → API endpoints
+├── Controllers → Business logic
+├── Models → Database schemas
+├── Middleware → Auth & validation
+├── Services → Logging & utilities
 │
 ▼
-Data Storage Layer
+Database + Blockchain
 │
-├── MongoDB Atlas         → Users, Candidates, Logs
-└── Blockchain Network    → Immutable vote records
+├── MongoDB Atlas → Users, Candidates, Logs
+└── Ethereum / Polygon → Immutable vote records
 
-This architecture ensures the system is scalable, maintainable, and testable.
+The architecture separates responsibilities across layers, making the system scalable, maintainable, and testable.
 
 ⚙️ Core Features
 1️⃣ Secure User Authentication
-
-The system ensures that only verified voters can participate through multi-layer authentication:
-
 Email-based OTP verification
 JWT-based login authentication
 Face recognition verification before voting
 
-This layered approach prevents unauthorized access and fake voters.
+This multi-layer authentication ensures only verified voters can cast votes.
 
 2️⃣ Blockchain Vote Recording
 
-Votes are recorded through blockchain transactions using a smart contract.
-
-Benefits:
+Votes are stored on a smart contract, ensuring:
 
 Tamper-proof vote storage
 Transparent vote counting
 Immutable election records
 
-Each vote becomes a permanent blockchain record.
-
-The blockchain integration uses Web3.js to interact with smart contracts inspired by networks such as Bitcoin.
-
-Cryptographic hashing is performed using SHA-256.
+Each vote transaction is permanently recorded on the blockchain.
 
 3️⃣ Double Voting Prevention
 
-The system ensures one voter = one vote using multiple validation layers:
+The system prevents duplicate voting using:
 
 MongoDB atomic update queries
 hasVoted flag validation
 Blockchain transaction verification
 
-This prevents duplicate voting attempts.
+This ensures one voter = one vote.
 
 4️⃣ Admin Dashboard
 
-Administrators manage the election through a dedicated dashboard.
-
-Admin capabilities include:
+Administrators can:
 
 Add election candidates
-Set election start and end times
+Set election start and end time
 Monitor vote counts
 Propose election results
 Review admin activity logs
@@ -89,86 +71,70 @@ The dashboard provides visual analytics using charts.
 
 5️⃣ Audit Logging System
 
-To improve transparency, all important actions are recorded.
-
-Logged events include:
+Every critical activity is logged:
 
 User login
 Vote casting
 Candidate creation
 Admin actions
 
-This creates a traceable activity history.
+This improves transparency and accountability.
 
 🧱 Backend Architecture (MVC)
-
-The backend is organized using the Model-View-Controller (MVC) pattern.
-
 Models
 
-Models define database schemas using Mongoose.
+Defines database schemas using Mongoose
 
 Examples:
 
 User
 Candidate
 OTP
-Vote
 AuditLog
 AdminLog
 ElectionConfig
 Controllers
 
-Controllers contain business logic for each domain.
+Contains business logic for each domain:
 
 Controller	Responsibility
-Auth Controller	OTP verification, login, registration
-Vote Controller	Vote casting and validation
+Auth Controller	OTP, login, registration
+Vote Controller	Vote casting
 Candidate Controller	Candidate management
-Election Controller	Election timing control
+Election Controller	Election timing
 Admin Controller	Result approval
-Audit Controller	Logs and user profile
+Audit Controller	Logs & user profile
 Health Controller	System health check
 Routes
 
-Routes connect frontend requests to backend controllers.
+Maps URLs to controllers.
 
-Example endpoints:
+Example:
 
 POST /api/auth/register
 POST /api/auth/login
 POST /api/vote
-GET /api/candidates
+GET  /api/candidates
 Middleware
 
-Middleware handles cross-cutting logic such as security and validation.
-
-Examples:
+Handles cross-cutting logic:
 
 JWT verification
 Role-based access control
 Input validation
 Global error handling
 🔐 Security Measures
-
-The system implements several security protections.
-
 Threat	Protection
 XSS attacks	Helmet security headers
 NoSQL injection	Mongo sanitize
 Parameter pollution	HPP middleware
 Brute-force attacks	Rate limiting
-Double voting	Atomic MongoDB updates
+Double voting	Atomic MongoDB update
 Token tampering	JWT signature validation
 Face spoofing	Descriptor comparison
-
-These protections strengthen backend security.
-
 🧪 Testing
 
-The backend includes 41 automated tests.
-
-Testing tools used:
+The backend includes 41 automated tests using:
 
 Jest
 Supertest
@@ -180,7 +146,7 @@ Authentication
 Voting logic
 Candidate APIs
 Middleware validation
-🛠 Technology Stack
+🛠️ Technology Stack
 Frontend
 HTML5
 CSS3
@@ -195,7 +161,7 @@ Database
 MongoDB Atlas
 Mongoose ORM
 Blockchain
-Solidity smart contract
+Solidity Smart Contract
 Web3.js
 Polygon Amoy Testnet
 Security
@@ -207,22 +173,16 @@ Testing
 Jest
 Supertest
 ⚠️ Known Limitations
-
-Some limitations remain due to the prototype nature of the system.
-
-Face recognition is not production-grade.
+Face recognition is not production-grade
 Photo spoofing may still be possible.
-Server signs blockchain transactions.
+Server signs blockchain transactions
 True decentralization would require MetaMask voting.
-Votes are not fully anonymous.
+Votes are not fully anonymous
 Audit logs store voter hash.
-Rate limiting is single-instance.
-Production environments would require Redis.
+Rate limiting is single-instance
+Production requires Redis.
 🚀 Future Improvements
-
-Possible future upgrades include:
-
-MetaMask-based voting
+MetaMask based voting
 Zero-knowledge proofs for anonymous voting
 Biometric liveness detection
 Mobile application
@@ -230,20 +190,20 @@ Multi-region deployment
 📊 Project Highlights
 
 ✔ Blockchain-based vote storage
-✔ OTP + face verification security
+✔ OTP + Face verification security
 ✔ MVC scalable backend architecture
 ✔ Admin analytics dashboard
 ✔ 41 automated backend tests
 
 🎓 Conclusion
 
-ElectionChain demonstrates how blockchain technology, biometric verification, and secure backend architecture can be combined to build a transparent digital voting system.
+ElectionChain demonstrates how blockchain, biometrics, and modern backend architecture can be combined to create a secure and transparent digital voting system.
 
-The project highlights real-world concepts including:
+The project showcases real-world concepts including:
 
-distributed ledger technology
+distributed ledgers
 authentication systems
 secure API design
 scalable backend architecture
 
-This makes ElectionChain a strong example of modern secure web application development.
+making it a strong example of modern secure web application development.
