@@ -7,7 +7,7 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js" onerror="document.getElementById('modelBannerText').textContent='⚠️ Face AI failed to load. Check your internet connection and refresh the page.';document.getElementById('modelBanner').style.background='#fee2e2';document.getElementById('modelBanner').style.borderColor='#dc2626';document.getElementById('modelBanner').style.color='#dc2626';"></script>
-<script src="electionchain-backend/api.js"></script>
+<script src="api.js"></script>
 <style>
 :root {
   --bg:       #f5f2ee;
@@ -621,6 +621,25 @@ select.form-input{cursor:pointer;}
           <label class="form-label">Full Name <span class="req">*</span></label>
           <input type="text" id="userName" placeholder="Enter your full name" class="form-input" aria-label="Your full name" tabindex="0">
         </div>
+        <div class="form-group" id="aadhaarGroup">
+          <label class="form-label">Aadhaar Number <span class="req">*</span></label>
+          <input type="text" id="aadhaarInput" placeholder="1234 5678 9012" class="form-input"
+                 maxlength="14" inputmode="numeric" autocomplete="off"
+                 aria-label="Your 12-digit Aadhaar number" tabindex="0">
+          <div style="font-size:.78rem;color:var(--text3);margin-top:4px;">
+            <i class="fas fa-lock"></i> Stored as encrypted hash only — never in plain text
+          </div>
+        </div>
+        <!-- Masked badge — shown after Aadhaar verified, hides input above -->
+        <div id="aadhaarMaskedBadge" style="display:none;margin-bottom:14px;">
+          <label class="form-label">Aadhaar Verified</label>
+          <div style="display:inline-flex;align-items:center;gap:8px;background:var(--blue-lt);
+               color:var(--navy);border:1.5px solid rgba(37,99,235,.2);border-radius:8px;
+               padding:9px 14px;font-size:.88rem;font-weight:600;font-family:monospace;letter-spacing:.06em;">
+            <i class="fas fa-shield-alt" style="color:var(--blue);"></i>
+            <span id="aadhaarMaskedText">XXXX-XXXX-XXXX</span>
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label">Email Address <span class="req">*</span></label>
           <input type="email" id="userEmail" placeholder="Enter your email" class="form-input" aria-label="Your email address" tabindex="0">
@@ -830,6 +849,9 @@ select.form-input{cursor:pointer;}
           <div class="card-title">Admin Controls</div>
           <div class="card-subtitle">Set election schedule and manage results</div>
         </div>
+        <button onclick="openAdminDashboard()" class="btn btn-blue" style="margin-left:auto;display:flex;align-items:center;gap:8px;padding:10px 18px;font-size:.85rem;" aria-label="Open full admin dashboard">
+          <i class="fas fa-tachometer-alt"></i> Admin Dashboard
+        </button>
       </div>
 
 
@@ -976,11 +998,11 @@ select.form-input{cursor:pointer;}
             <div id="electionCountdown" style="font-size:1.1rem;font-weight:800;color:#fff;">—</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button onclick="showAuditLog()" class="btn btn-outline" style="font-size:.82rem;padding:8px 14px;border-color:rgba(255,255,255,.3);color:#fff;" aria-label="View audit trail" tabindex="0">
-              <i class="fas fa-list-alt"></i> Audit Trail
+            <button onclick="showAuditLog()" class="btn" style="font-size:.82rem;padding:8px 16px;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.5);color:#fff;border-radius:8px;cursor:pointer;font-weight:600;" aria-label="View audit trail" tabindex="0">
+              <i class="fas fa-list-alt"></i>&nbsp; Audit Trail
             </button>
-            <button onclick="showAdminLog()" class="btn btn-outline" style="font-size:.82rem;padding:8px 14px;border-color:rgba(255,255,255,.3);color:#fff;" aria-label="View admin log" tabindex="0">
-              <i class="fas fa-shield-alt"></i> Admin Log
+            <button onclick="showAdminLog()" class="btn" style="font-size:.82rem;padding:8px 16px;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.5);color:#fff;border-radius:8px;cursor:pointer;font-weight:600;" aria-label="View admin log" tabindex="0">
+              <i class="fas fa-shield-alt"></i>&nbsp; Admin Log
             </button>
           </div>
         </div>
@@ -1663,6 +1685,12 @@ class ElectionChainApp{
     document.getElementById('userEmail').value='';
     document.getElementById('otpSection').style.display='none';
     document.getElementById('otpVerifiedBadge').style.display='none';
+    // Reset Aadhaar state
+    document.getElementById('aadhaarInput').value='';
+    document.getElementById('aadhaarInput').style.borderColor='';
+    document.getElementById('aadhaarGroup').style.display='block';
+    document.getElementById('aadhaarMaskedBadge').style.display='none';
+    _aadhaarVerified=false; _aadhaarValue='';
     retakeReg();this.updateStatus();
     saveToStorage(this);
     showToast(`${name} has been registered successfully!`,'success');
@@ -2024,6 +2052,13 @@ class ElectionChainApp{
 
 // TOAST
 let toastTimer;
+function openAdminDashboard(){
+  // Set demo admin token so admin-dashboard.html lets us through
+  const demoUser={role:'admin',address:'0x00523d6340358Ae8f7bA140fa2D93eC9B90cF2dd',name:'Administrator',demo:true};
+  localStorage.setItem('ec_token','demo_admin_token');
+  localStorage.setItem('ec_user',JSON.stringify(demoUser));
+  window.open('admin-dashboard.html','_blank');
+}
 function showToast(msg,type='success'){
   const icons={success:'fa-check-circle',error:'fa-times-circle',info:'fa-info-circle',warning:'fa-exclamation-triangle'};
   const t=document.getElementById('toast');
@@ -2207,8 +2242,102 @@ function declareResults(){
 }
 function setStartTime(){app.setStartTime();}
 function setStopTime(){app.setStopTime();}
-function sendOTP(){
-  const email=document.getElementById('userEmail').value.trim();
+// ── Aadhaar auto-format (spaces every 4 digits) ──────────────────
+document.getElementById('aadhaarInput').addEventListener('input', function() {
+  let raw = this.value.replace(/\D/g, '').slice(0, 12);
+  this.value = raw.replace(/(\d{4})(?=\d)/g, '$1 ');
+  this.style.borderColor = '';
+});
+
+// ── Aadhaar state ────────────────────────────────────────────────
+let _aadhaarVerified = false;
+let _aadhaarValue    = '';
+const API_BASE_URL   = 'http://localhost:4000/api';
+
+// Demo seed pairs for offline mode (matches seed.preapproved.js)
+const DEMO_APPROVED = [
+  { aadhaar: '123456789012', email: 'voter1@test.com' },
+  { aadhaar: '234567890123', email: 'voter2@test.com' },
+  { aadhaar: '345678901234', email: 'aryan@demo.com' },
+  { aadhaar: '456789012345', email: 'testvoter@gmail.com' },
+  { aadhaar: '567890123456', email: 'demo.user@example.com' },
+];
+
+function checkDemoAadhaar(aadhaar, email) {
+  return DEMO_APPROVED.some(
+    r => r.aadhaar === aadhaar && r.email === email.toLowerCase().trim()
+  );
+}
+
+function markAadhaarVerified(aadhaarRaw) {
+  _aadhaarVerified = true;
+  _aadhaarValue    = aadhaarRaw;
+  document.getElementById('aadhaarGroup').style.display       = 'none';
+  document.getElementById('aadhaarMaskedBadge').style.display = 'block';
+  document.getElementById('aadhaarMaskedText').textContent    = `XXXX-XXXX-${aadhaarRaw.slice(-4)}`;
+}
+
+async function sendOTP() {
+  const email      = document.getElementById('userEmail').value.trim();
+  const aadhaarRaw = document.getElementById('aadhaarInput').value.replace(/\s/g, '');
+
+  // ── Step A: Aadhaar check (only if not already verified) ─────
+  if (!_aadhaarVerified) {
+    if (!/^\d{12}$/.test(aadhaarRaw)) {
+      document.getElementById('aadhaarInput').style.borderColor = 'var(--red, #dc2626)';
+      showToast('Aadhaar number must be exactly 12 digits.', 'error');
+      return;
+    }
+    if (!email || !email.includes('@')) {
+      showToast('Please enter a valid email address first.', 'error');
+      return;
+    }
+
+    // Disable button during check
+    const btn = document.querySelector('button[onclick="sendOTP()"]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking…'; }
+
+    const restoreBtn = () => {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send OTP'; }
+    };
+
+    // Try backend first; fall back to local demo validation if unreachable
+    let backendOk = false;
+    try {
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), 3000); // 3s timeout
+      const res  = await fetch(`${API_BASE_URL}/auth/aadhaar/check`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ aadhaarNumber: aadhaarRaw, email }),
+        signal:  ctrl.signal,
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        showToast(data.error || 'Aadhaar and email do not match our records.', 'error');
+        restoreBtn();
+        return;
+      }
+      backendOk = true;
+      markAadhaarVerified(aadhaarRaw);
+      restoreBtn();
+
+    } catch (e) {
+      // Backend unreachable — use local demo validation
+      console.warn('[Aadhaar] Backend unreachable, using local demo validation.');
+      if (!checkDemoAadhaar(aadhaarRaw, email)) {
+        showToast('Aadhaar and email do not match our records. (Offline mode: use demo pairs)', 'error');
+        restoreBtn();
+        return;
+      }
+      markAadhaarVerified(aadhaarRaw);
+      showToast('Aadhaar verified (offline demo mode). Sending OTP…', 'info');
+      restoreBtn();
+    }
+  }
+
+  // ── Step B: Existing OTP logic (unchanged) ────────────────────
   app.sendOTP(email);
 }
 function verifyOTPCode(){

@@ -1,8 +1,3 @@
-/**
- * ElectionChain — app.js
- * Express app factory (separated from server startup for testability)
- */
-
 require('dotenv').config();
 const express        = require('express');
 const cors           = require('cors');
@@ -12,6 +7,7 @@ const hpp            = require('hpp');
 const rateLimit      = require('express-rate-limit');
 
 const authRoutes      = require('./routes/auth.routes');
+const aadhaarRoutes   = require('./routes/aadhaar.routes');
 const voteRoutes      = require('./routes/vote.routes');
 const candidateRoutes = require('./routes/candidate.routes');
 const electionRoutes  = require('./routes/election.routes');
@@ -22,12 +18,8 @@ const { errorHandler, notFound } = require('./middleware/error.middleware');
 
 const app = express();
 
-// ── SECURITY HEADERS ──────────────────────────────────────────────
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-}));
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
-// ── CORS ──────────────────────────────────────────────────────────
 const allowedOrigins = (
   process.env.CORS_ORIGINS ||
   'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5500,http://127.0.0.1:5500'
@@ -41,17 +33,11 @@ app.use(cors({
   credentials: true,
 }));
 
-// ── BODY PARSING ──────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// ── NOSQL INJECTION PREVENTION ────────────────────────────────────
 app.use(mongoSanitize());
-
-// ── HTTP PARAMETER POLLUTION PREVENTION ──────────────────────────
 app.use(hpp());
 
-// ── GLOBAL RATE LIMITER ───────────────────────────────────────────
 app.use('/api/', rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -60,16 +46,15 @@ app.use('/api/', rateLimit({
   message: { success: false, error: 'Too many requests. Try again later.' },
 }));
 
-// ── ROUTES ────────────────────────────────────────────────────────
 app.use('/api/health',     healthRoutes);
-app.use('/api/auth',       authRoutes);
+app.use('/api/auth',            authRoutes);
+app.use('/api/auth/aadhaar',    aadhaarRoutes);
 app.use('/api/vote',       voteRoutes);
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/election',   electionRoutes);
 app.use('/api/admin',      adminRoutes);
 app.use('/api/audit',      auditRoutes);
 
-// ── ERROR HANDLING ────────────────────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
 
