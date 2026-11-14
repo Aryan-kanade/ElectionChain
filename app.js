@@ -23,8 +23,23 @@ const { errorHandler, notFound } = require('./middleware/error.middleware');
 const app = express();
 
 // ── SECURITY HEADERS ──────────────────────────────────────────────
+// CSP permits exactly what demo.html uses: jsdelivr (face-api + models),
+// cdnjs (Font Awesome), Google Fonts, and the page's own inline scripts.
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'script-src':      ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://cdn.jsdelivr.net'],
+      'script-src-attr': ["'unsafe-inline'"],
+      'style-src':       ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
+      'font-src':        ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com'],
+      'img-src':         ["'self'", 'data:', 'blob:', 'https:'],
+      'media-src':       ["'self'", 'blob:'],
+      'connect-src':     ["'self'", 'https:'],
+      'worker-src':      ["'self'", 'blob:'],
+    },
+  },
 }));
 
 // ── CORS ──────────────────────────────────────────────────────────
@@ -54,11 +69,28 @@ app.use(hpp());
 // ── GLOBAL RATE LIMITER ───────────────────────────────────────────
 app.use('/api/', rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: parseInt(process.env.RATE_LIMIT_MAX) || 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests. Try again later.' },
 }));
+
+// ── VOTER DEMO FRONTEND (whitelisted static files) ────────────────
+// Serves only these exact paths from the repo root — never a directory
+// listing or any other file (keeps .env, source, contract out of reach).
+const path = require('path');
+const fs   = require('fs');
+const staticFiles = {
+  '/':          path.join(__dirname, 'demo.html'),
+  '/demo.html': path.join(__dirname, 'demo.html'),
+  '/api.js':    path.join(__dirname, 'api.js'),
+  '/config.js': path.join(__dirname, 'config.js'), // optional frontend override
+};
+app.get(Object.keys(staticFiles), (req, res) => {
+  const file = staticFiles[req.path];
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'Not found' });
+  res.sendFile(file);
+});
 
 // ── ROUTES ────────────────────────────────────────────────────────
 app.use('/api/health',     healthRoutes);

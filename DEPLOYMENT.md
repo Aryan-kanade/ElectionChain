@@ -19,16 +19,16 @@
 
 ## Step 2 — Deploy Backend on Render (Free)
 
-1. Go to **https://render.com** → Sign up (free)
-2. **New** → **Web Service** → Connect your GitHub repo
-3. Settings:
-   - **Name:** `electionchain-backend`
-   - **Root Directory:** `electionchain-backend`
+2. Go to **https://render.com** → Sign up (free)
+3. **New** → **Web Service** → Connect your GitHub repo
+4. Settings:
+   - **Name:** `electionchain`
+   - **Root Directory:** *(leave empty — repo root)*
    - **Build Command:** `npm install`
    - **Start Command:** `node server.js`
    - **Instance Type:** Free
 
-4. **Environment Variables** → Add these:
+5. **Environment Variables** → Add these:
 
    | Key | Value |
    |-----|-------|
@@ -36,57 +36,37 @@
    | `PORT` | `4000` |
    | `MONGODB_URI` | *(your Atlas URI)* |
    | `JWT_SECRET` | *(random 64-char hex)* |
-   | `ADMIN_ADDRESS` | *(your MetaMask address)* |
-   | `ADMIN_PRIVATE_KEY` | *(your private key)* |
-   | `CONTRACT_ADDRESS` | *(deployed contract)* |
+   | `ADMIN_ADDRESS` | *(your admin wallet address)* |
+   | `ADMIN_PRIVATE_KEY` | *(your private key — only if contract deployed)* |
+   | `CONTRACT_ADDRESS` | *(deployed contract — only if contract deployed)* |
    | `POLYGON_AMOY_RPC` | `https://rpc-amoy.polygon.technology` |
-   | `CORS_ORIGINS` | `https://your-app.netlify.app` |
-   | `SMTP_USER` | *(your Gmail)* |
-   | `SMTP_PASS` | *(your App Password)* |
+   | `CORS_ORIGINS` | `https://your-service.onrender.com` |
+   | `SMTP_USER` | *(your Gmail — optional)* |
+   | `SMTP_PASS` | *(your App Password — optional)* |
    | `REQUIRED_APPROVALS` | `1` |
 
-5. Click **Create Web Service** → wait ~2 min for build
-6. Your backend URL: `https://electionchain-backend.onrender.com`
+6. Click **Create Web Service** → wait ~2 min for build
+7. Your app URL: `https://your-service.onrender.com` — **the backend serves the
+   voter demo at `/`**, no separate frontend hosting needed.
 
 > **Note:** Free Render services sleep after 15 min of inactivity. First request after sleep takes ~30s. Upgrade to Starter ($7/mo) to disable sleep for production use.
 
 ---
 
-## Step 3 — Deploy Frontend on Netlify (Free)
+## Step 3 — Frontend (already handled ✅)
 
-1. Go to **https://netlify.com** → Sign up (free)
-2. **Add new site** → **Import from Git** → connect your repo
-3. Settings:
-   - **Publish directory:** `/` (root, where demo.html lives)
-   - **Build command:** *(leave empty)*
-4. Click **Deploy site**
-5. Your frontend URL: `https://your-app.netlify.app`
-
-### Fix API URL for Production
-
-In `electionchain-backend/api.js`, change line 1:
-```js
-// Development
-const API_BASE = 'http://localhost:4000/api';
-
-// Production — replace with your Render URL
-const API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:4000/api'
-  : 'https://electionchain-backend.onrender.com/api';
-```
-
-### Fix Admin Dashboard Link
-
-In `demo.html`, the admin dashboard button should link to `admin-dashboard.html`.
-Copy `frontend/admin-dashboard.html` to your project root (same level as `demo.html`).
+No separate frontend deployment needed. `app.js` serves `demo.html` and `api.js`
+from the backend origin (whitelisted static routes), and `api.js` automatically
+targets same-origin `/api` in production.
 
 ---
 
-## Step 4 — Fix CORS After Deployment
+## Step 4 — CORS
 
-After you know your Netlify URL, update `CORS_ORIGINS` in Render:
+`CORS_ORIGINS` only matters if you host the frontend on a different domain.
+For the same-origin deployment the default is fine:
 ```
-CORS_ORIGINS=https://your-app.netlify.app,https://custom-domain.com
+CORS_ORIGINS=https://your-service.onrender.com
 ```
 
 ---
@@ -103,30 +83,28 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ## Step 6 — Verify Everything Works
 
 ```bash
-# Test your live backend health endpoint:
-curl https://electionchain-backend.onrender.com/api/health
+# Test your live app:
+curl https://your-service.onrender.com/api/health
 
 # Expected response:
 # { "status":"ok", "version":"4.0.0", "dbConnected":true, ... }
 ```
+
+Then open `https://your-service.onrender.com/` — the voter demo loads there.
 
 ---
 
 ## Quick-Start for Local Dev
 
 ```bash
-# Terminal 1 — Backend
-cd electionchain-backend
 cp .env.example .env   # fill in your values
 npm install
-node server.js         # runs on http://localhost:4000
-
-# Terminal 2 — Frontend
-cd ..                  # project root
-npx http-server . -p 3000
-# Open: http://localhost:3000/demo.html
-# Admin: http://localhost:3000/admin-dashboard.html
+node server.js         # http://localhost:4000 — serves the demo at /
 ```
+
+> Optional (split hosting): serve the repo with any static server
+> (e.g. `npx http-server . -p 3000`) — `api.js` detects localhost and targets
+> `http://localhost:4000/api` automatically.
 
 ---
 

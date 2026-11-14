@@ -7,7 +7,14 @@
  * Usage: <script src="api.js"></script>
  */
 
-const API_BASE = 'http://localhost:4000/api';
+// API base resolution order:
+//   1. window.EC_API_BASE   — explicit override set by config.js (optional)
+//   2. same origin          — backend serves the frontend itself (any host)
+//   3. localhost dev server — static frontend opened from a separate local server
+const API_BASE = window.EC_API_BASE
+  || (['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port !== '4000'
+    ? 'http://localhost:4000/api'
+    : '/api');
 
 // ── TOKEN MANAGEMENT ─────────────────────────────────────────────
 const Auth = {

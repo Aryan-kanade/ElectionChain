@@ -6,6 +6,58 @@ The system integrates OTP authentication, face verification, and blockchain reco
 
 The platform follows a modern MVC backend architecture with a lightweight frontend interface and a smart contract deployed on blockchain to guarantee tamper-proof vote storage.
 
+## 📁 Project Structure
+
+```
+ElectionChain/
+├── server.js               # Entry point — DB + blockchain init, HTTP server
+├── app.js                  # Express app — security middleware, API routes,
+│                           #   serves demo.html at the root in production
+├── api.js                  # Frontend API client (auto-detects API base URL)
+├── demo.html               # Voter interface (face-api + OTP + voting UI)
+├── Election.sol            # Solidity voting contract
+├── deploy.js               # Deploys the contract & writes contractABI.json
+├── .env.example            # All configuration variables, documented
+├── config/                 # database.js · blockchain.js · mailer.js
+├── controllers/            # auth · vote · candidate · election · admin · audit · health
+├── models/                 # Mongoose schemas (User, OTP, Candidate, AuditLog, …)
+├── routes/                 # Express routers per domain
+├── middleware/             # JWT auth · validation · error handling
+├── services/               # Audit logging
+├── utils/                  # Crypto helpers (hashing, OTP, face distance)
+└── tests/                  # Jest + Supertest suite (44 tests)
+```
+
+## 🚀 Quick Start
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Configure
+cp .env.example .env        # fill in MONGODB_URI + JWT_SECRET (see file comments)
+
+# 3. Run
+node server.js              # http://localhost:4000 — serves the voter UI at /
+
+# Open http://localhost:4000 — the backend hosts the demo itself.
+# Without SMTP configured, OTPs print to the server console (dev mode).
+# Without a deployed contract, the app runs in DB-only mode (blockchain off).
+```
+
+Run the test suite:
+
+```bash
+npm test                    # 44 tests — auth, voting, candidates, middleware
+```
+
+## 🌍 Deployment
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full guide (Render + MongoDB Atlas).
+In short: the backend serves the frontend from the same origin, so a single
+web service + a free MongoDB Atlas cluster is a complete production deployment.
+Configure everything through environment variables — see `.env.example`.
+
 🏗️ System Architecture
 Browser (Frontend)
 │
