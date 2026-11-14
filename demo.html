@@ -1793,7 +1793,9 @@ class ElectionChainApp{
     const c=this.candidates.find(x=>x.id===id);
     const doVote=()=>{
       const ud=this.registeredUsers.get(this.currentUser?.address);
-      if(ud?.descriptor&&!faceVerifiedSession){openVerify(id);return;}
+      // Live mode always runs the verify modal — the faceToken comes from
+      // server-side verification, whether or not a local descriptor exists
+      if((ud?.descriptor||Backend.ok())&&!faceVerifiedSession){openVerify(id);return;}
       this.castVote(id);
     };
     showConfirm('Confirm Your Vote',`You are about to vote for "${c?.name}" (${c?.party}). This action is final and cannot be undone.`,doVote);
@@ -2349,7 +2351,9 @@ const Backend={
     if(!this.ok())return;
     try{
       const cs=await API.getCandidates();
-      app.candidates=cs.candidates.map(c=>({id:c.id,name:c.name,party:c.party,voteCount:c.voteCount,supported:c.approved!==false}));
+      // supported:false keeps the app's Endorse → Vote flow intact;
+      // endorsement is a UI gate, the vote itself is what hits the API
+      app.candidates=cs.candidates.map(c=>({id:c.id,name:c.name,party:c.party,voteCount:c.voteCount,supported:false}));
       app.candidatesCount=app.candidates.reduce((m,c)=>Math.max(m,c.id),0);
       const st=await API.getElectionStatus();
       app.electionStartTime=st.start?new Date(st.start):null;
