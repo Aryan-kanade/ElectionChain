@@ -1382,16 +1382,19 @@ async function runVerify(){
 
   const fa=window.faceapi;
   const ud=app.registeredUsers.get(app.currentUser?.address);
-  if(!ud?.descriptor){
+  // In live mode the reference descriptor lives on the server; the local
+  // cache (when present) only drives the per-scan visual feedback.
+  const stored=ud?.descriptor?new Float32Array(Object.values(ud.descriptor)):null;
+  if(!stored&&!Backend.ok()){
     verdict.className='verdict fail';
     verdict.innerHTML='<i class="fas fa-times-circle"></i> No registered face found for this account.';
     verdict.style.display='flex';btn.disabled=false;return;
   }
-  const stored=new Float32Array(Object.values(ud.descriptor));
 
   // FIX 7: 3 consecutive scans
   const SCANS=3,THRESH=0.52;
   let passed=0;
+  const distances=[];let lastDesc=null;
   const dots=[document.getElementById('scanDot1'),document.getElementById('scanDot2'),document.getElementById('scanDot3')];
   const progressTxt=document.getElementById('scanProgressTxt');
   dots.forEach(d=>{if(d)d.style.background='var(--border)';});
@@ -1415,27 +1418,55 @@ async function runVerify(){
     document.getElementById('scorePointsVal').textContent=totalPts;
     document.getElementById('scorePointsSub').textContent=`68 base + ${totalPts-68} interpolated`;
     document.getElementById('verifyPointsBadge').textContent=`${totalPts} mesh points`;
-    const dist=fa.euclideanDistance(det.descriptor,stored);
-    const matchScore=Math.max(0,Math.round((1-dist)*100));
-    updateScoreMatch(matchScore,dist<=THRESH);
-    if(dist<=THRESH){
-      passed++;
-      if(dots[i])dots[i].style.background='var(--green)';
-      if(progressTxt)progressTxt.textContent=`Scan ${i+1}: Match ${matchScore}% ✓`;
+    lastDesc=Array.from(det.descriptor);
+    if(stored){
+      const dist=fa.euclideanDistance(det.descriptor,stored);
+      distances.push(dist);
+      const matchScore=Math.max(0,Math.round((1-dist)*100));
+      updateScoreMatch(matchScore,dist<=THRESH);
+      if(dist<=THRESH){
+        passed++;
+        if(dots[i])dots[i].style.background='var(--green)';
+        if(progressTxt)progressTxt.textContent=`Scan ${i+1}: Match ${matchScore}% ✓`;
+      } else {
+        if(dots[i])dots[i].style.background='var(--red)';
+        if(progressTxt)progressTxt.textContent=`Scan ${i+1}: Score ${matchScore}% — too low`;
+      }
     } else {
-      if(dots[i])dots[i].style.background='var(--red)';
-      if(progressTxt)progressTxt.textContent=`Scan ${i+1}: Score ${matchScore}% — too low`;
+      // No local reference — the server compares against its stored descriptor
+      passed++;
+      updateScoreMatch(0,false);
+      if(dots[i])dots[i].style.background='var(--green)';
+      if(progressTxt)progressTxt.textContent=`Scan ${i+1}: Face captured ✓`;
     }
   }
 
   const required=2; // Pass 2 out of 3
   if(passed>=required){
+    const finishVerify=()=>{
+      faceVerifiedSession=true;stopVerifyStream();clearInterval(verifyLiveLoop);verifyLiveLoop=null;
+      if(progressTxt)progressTxt.textContent=`Verified! ${passed}/${SCANS} scans passed ✓`;
+      setTimeout(()=>{closeVerify();app.castVote(pendingVoteId);},1500);
+    };
+    verdict.style.display='flex';
+    if(Backend.ok()){
+      if(!lastDesc){btn.disabled=false;return;}
+      // Live mode: server-side verification issues the voting faceToken
+      Backend.verifyFace(lastDesc,distances.length?distances:[0.4,0.4,0.4]).then(r=>{
+        verdict.className='verdict pass';
+        verdict.innerHTML=`<i class="fas fa-check-circle"></i> Identity confirmed server-side (${Math.round(r.matchScore)}% match) — proceeding to vote…`;
+        finishVerify();
+      }).catch(e=>{
+        verdict.className='verdict fail';
+        verdict.innerHTML=`<i class="fas fa-times-circle"></i> ${e.message}`;
+        btn.disabled=false;
+        showToast('Server-side face verification failed','error');
+      });
+      return;
+    }
     verdict.className='verdict pass';
     verdict.innerHTML=`<i class="fas fa-check-circle"></i> Identity confirmed! Passed ${passed}/${SCANS} scans — proceeding to vote…`;
-    verdict.style.display='flex';
-    faceVerifiedSession=true;stopVerifyStream();clearInterval(verifyLiveLoop);verifyLiveLoop=null;
-    if(progressTxt)progressTxt.textContent=`Verified! ${passed}/${SCANS} scans passed ✓`;
-    setTimeout(()=>{closeVerify();app.castVote(pendingVoteId);},1500);
+    finishVerify();
   } else {
     verdict.className='verdict fail';
     verdict.innerHTML=`<i class="fas fa-times-circle"></i> Verification failed. Only ${passed}/${SCANS} scans matched. Try again in better lighting.`;
@@ -1625,6 +1656,16 @@ class ElectionChainApp{
   loginUser(){
     const addr=document.getElementById('userAddress').value.trim(),role=document.getElementById('userRole').value;
     if(!addr){showToast('Please enter your wallet address','error');return;}
+    if(Backend.ok()){
+      // Live mode: the backend decides roles (ADMIN_ADDRESS env var)
+      Backend.login(addr,role==='admin'?'admin':undefined).then(r=>{
+        this.currentUser={address:addr,role:r.user?.role||'voter',name:r.user?.name||addr,email:this.registeredUsers.get(addr)?.email||''};
+        if(!this.registeredUsers.has(addr))this.registeredUsers.set(addr,{name:this.currentUser.name,role:this.currentUser.role,descriptor:null});
+        this.showMainApp();Backend.refresh();
+        showToast(`Welcome, ${this.currentUser.name}!`,'success');
+      }).catch(e=>showToast(e.message,'error'));
+      return;
+    }
     const ADMIN='0x00523d6340358Ae8f7bA140fa2D93eC9B90cF2dd';
     if(role==='admin'&&addr.toLowerCase()!==ADMIN.toLowerCase()){showToast('Only the designated admin address can log in as admin','error');return;}
     if(role==='voter'&&!this.registeredUsers.has(addr)){showToast('This address is not registered. Please register first.','error');return;}
@@ -1636,6 +1677,26 @@ class ElectionChainApp{
     const name=document.getElementById('userName').value.trim();
     const email=document.getElementById('userEmail').value.trim();
     if(!addr||!name||!email){showToast('Please fill in all fields','error');return;}
+    if(Backend.ok()){
+      // Live mode: OTP + uniqueness enforced server-side; descriptor stored server-side
+      if(!regDescriptor||regDescriptor==='NO_MODEL'){showToast('Please complete your face scan first','error');return;}
+      Backend.register(addr,name,email,Array.from(regDescriptor),'').then(()=>{
+        this.registeredUsers.set(addr,{name,email,role:'voter',
+          descriptor:Array.from(regDescriptor),
+          photoUrl:document.getElementById('regPhotoPreview').src||'',
+          registeredAt:new Date().toISOString()});
+        this.currentUser={address:addr,role:'voter',name,email};
+        document.getElementById('newUserAddress').value='';
+        document.getElementById('userName').value='';
+        document.getElementById('userEmail').value='';
+        document.getElementById('otpSection').style.display='none';
+        document.getElementById('otpVerifiedBadge').style.display='none';
+        retakeReg();this.updateStatus();saveToStorage(this);
+        this.showMainApp();Backend.refresh();
+        showToast(`${name} registered and signed in!`,'success');
+      }).catch(e=>showToast(e.message,'error'));
+      return;
+    }
     if(this.registeredUsers.has(addr)){showToast('This address is already registered','error');return;}
     const emailExists=[...this.registeredUsers.values()].some(u=>u.email.toLowerCase()===email.toLowerCase());
     if(emailExists){showToast('This email is already registered with another address','error');return;}
@@ -1704,6 +1765,14 @@ class ElectionChainApp{
   registerCandidate(){
     const name=document.getElementById('candidateName').value.trim(),party=document.getElementById('candidateParty').value.trim();
     if(!name){showToast('Please enter the candidate\'s name','error');return;}
+    if(Backend.ok()){
+      Backend.addCandidate(name,party||'Independent').then(()=>{
+        document.getElementById('candidateName').value='';document.getElementById('candidateParty').value='';
+        this.logAdminAction(`Added candidate: ${name} (${party||'Independent'})`);
+        showToast(`"${name}" added to the ballot`,'success');
+      }).catch(e=>showToast(e.message,'error'));
+      return;
+    }
     if(this.candidates.some(c=>c.name.toLowerCase()===name.toLowerCase())){showToast('A candidate with this name already exists','error');return;}
     this.candidatesCount++;
     this.candidates.push({id:this.candidatesCount,name,party:party||'Independent',supported:false,voteCount:0});
@@ -1736,6 +1805,23 @@ class ElectionChainApp{
     if(this.voters.has(this.currentUser.address)){showToast('You have already cast your vote','error');return;}
     const c=this.candidates.find(x=>x.id===id);
     if(!c||!c.supported){showToast(c?'This candidate has not been supported yet':'Candidate not found','error');return;}
+    if(Backend.ok()){
+      // Live mode: faceToken from server-side verification + atomic
+      // hasVoted update on the backend prevent double voting.
+      const faceToken=Backend.faceToken;
+      if(!faceToken){showToast('Face verification required before voting','error');return;}
+      Backend.castVote(id).then(async r=>{
+        const name=c.name,party=c.party;
+        this.voters.add(this.currentUser.address);
+        await Backend.refresh();
+        document.getElementById('step2').classList.remove('active');document.getElementById('step2').classList.add('done');
+        document.getElementById('step3').classList.add('active');
+        showVoteReceipt(name,party,r.refNo,new Date().toLocaleString(),r.voteHash);
+        showToast('Your vote has been recorded! ✓','success');
+        proctor.stop();
+      }).catch(e=>showToast(e.message,'error'));
+      return;
+    }
     c.voteCount++;this.voters.add(this.currentUser.address);
     // FIX 3: Hash the vote using SHA-256 for tamper resistance
     const voteData=`${this.currentUser.address}|${id}|${Date.now()}`;
@@ -1772,6 +1858,17 @@ class ElectionChainApp{
     const t=buildDateFromPicker('start');
     if(!t){showToast('Please select all date fields (day, month, year, time)','error');return;}
     if(t<=new Date()){showToast('Start time must be in the future','error');return;}
+    if(Backend.ok()){
+      // Live mode: the server stores both bounds; keep the existing end or default to +24h
+      const endISO=this.electionEndTime?this.electionEndTime.toISOString():new Date(Date.now()+24*3600*1000).toISOString();
+      Backend.setTimes(t.toISOString(),endISO).then(()=>{
+        this.electionStartTime=t;
+        document.getElementById('startDPC').classList.add('set');
+        this.logAdminAction(`Set election start time: ${t.toLocaleString()}`);
+        showToast('Election start time saved!','success');
+      }).catch(e=>showToast(e.message,'error'));
+      return;
+    }
     this.electionStartTime=t;this.updateStatus();
     document.getElementById('startDPC').classList.add('set');
     this.logAdminAction(`Set election start time: ${t.toLocaleString()}`);
@@ -1782,6 +1879,17 @@ class ElectionChainApp{
     const t=buildDateFromPicker('end');
     if(!t){showToast('Please select all date fields (day, month, year, time)','error');return;}
     if(t<=new Date()){showToast('End time must be in the future','error');return;}
+    if(Backend.ok()){
+      // Live mode: keep the existing start or default to now
+      const startISO=this.electionStartTime?this.electionStartTime.toISOString():new Date().toISOString();
+      Backend.setTimes(startISO,t.toISOString()).then(()=>{
+        this.electionEndTime=t;
+        document.getElementById('endDPC').classList.add('set');
+        this.logAdminAction(`Set election end time: ${t.toLocaleString()}`);
+        showToast('Election end time saved!','success');
+      }).catch(e=>showToast(e.message,'error'));
+      return;
+    }
     this.electionEndTime=t;this.updateStatus();
     document.getElementById('endDPC').classList.add('set');
     this.logAdminAction(`Set election end time: ${t.toLocaleString()}`);
@@ -1789,6 +1897,14 @@ class ElectionChainApp{
     showToast('Election end time saved!','success');
   }
   declareResults(){
+    if(Backend.ok()){
+      Backend.proposeResults().then(r=>{
+        this.resultsDeclared=true;this.updateStatus();this.getResults();
+        this.logAdminAction('Declared results early');
+        showToast(r.message||'Results have been declared!','info');
+      }).catch(e=>showToast(e.message,'error'));
+      return;
+    }
     this.resultsDeclared=true;this.updateStatus();this.getResults();
     this.logAdminAction('Declared results early');
     saveToStorage(this);showToast('Results have been declared!','info');
@@ -1843,7 +1959,7 @@ class ElectionChainApp{
   }
   updateStatus(){
     const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-    s('totalCandidates',this.candidates.length);s('registeredVoters',this.registeredUsers.size);
+    s('totalCandidates',this.candidates.length);s('registeredVoters',this._serverVoterCount??this.registeredUsers.size);
     s('totalVotes',this.candidates.reduce((x,c)=>x+c.voteCount,0));
     s('startTimeDisplay',this.electionStartTime?this.electionStartTime.toLocaleString():'Not set');
     s('endTimeDisplay',this.electionEndTime?this.electionEndTime.toLocaleString():'Not set');
@@ -1972,10 +2088,34 @@ class ElectionChainApp{
     el.textContent='Open — no end time set';el.style.color='var(--green)';
   }
   // FIX 8: Show full audit trail
-  showAuditLog(){
+  async showAuditLog(){
     const modal=document.getElementById('auditModal');
     const body=document.getElementById('auditBody');
     if(!modal||!body)return;
+    if(Backend.ok()){
+      try{
+        const r=await Backend.audit();
+        const entries=r.log||[];
+        const nameOf=id=>this.candidates.find(c=>c.id===id)?.name||'—';
+        body.innerHTML=!entries.length
+          ?'<p style="color:var(--text3);text-align:center;padding:24px;">No votes cast yet.</p>'
+          :`<div style="margin-bottom:12px;font-size:.82rem;color:var(--text2);">
+              Total entries: <strong>${entries.length}</strong> &nbsp;·&nbsp; All voter identities are SHA-256 hashed for privacy.
+            </div>`+
+            entries.map((e,i)=>`
+        <div style="background:var(--bg2);border-radius:8px;padding:12px 14px;margin-bottom:8px;font-size:.8rem;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <strong style="color:var(--navy);">#${i+1} — ${e.action}${e.blockchain?' ⛓':''}</strong>
+            <span style="color:var(--text3);">${new Date(e.timestamp).toLocaleString()}</span>
+          </div>
+          <div style="color:var(--text2);">Candidate: <strong>${nameOf(e.candidateId)}</strong> &nbsp; Ref: <span style="font-family:monospace;color:var(--blue);">${e.refNo||'—'}</span></div>
+          <div style="color:var(--text3);margin-top:4px;word-break:break-all;">Voter hash: ${e.voterHash||'—'}</div>
+          <div style="color:var(--text3);word-break:break-all;">Vote hash: ${e.voteHash||'—'}</div>
+        </div>`).join('');
+        modal.classList.add('open');
+      }catch(e){showToast(e.message,'error');}
+      return;
+    }
     if(!this.auditLog.length){body.innerHTML='<p style="color:var(--text3);text-align:center;padding:24px;">No votes cast yet.</p>';}
     else{
       body.innerHTML=`
@@ -1998,6 +2138,7 @@ class ElectionChainApp{
   // FIX 2: OTP send (simulated — in real app send via email API)
   sendOTP(email){
     if(!email||!email.includes('@')){showToast('Please enter a valid email address','error');return false;}
+    if(Backend.ok()){Backend.sendOTP(email).catch(e=>showToast(e.message,'error'));return true;}
     const otp=Math.floor(100000+Math.random()*900000).toString();
     const expiry=Date.now()+5*60*1000; // 5 min
     this.otpStore.set(email.toLowerCase(),{otp,expiry,verified:false});
@@ -2010,6 +2151,7 @@ class ElectionChainApp{
     return true;
   }
   verifyOTP(email,code){
+    if(Backend.ok()){Backend.verifyOTP(email,code).catch(e=>showToast(e.message,'error'));return true;}
     const rec=this.otpStore.get(email.toLowerCase());
     if(!rec){showToast('No OTP sent to this email. Click Send OTP first.','error');return false;}
     if(Date.now()>rec.expiry){showToast('OTP has expired. Please request a new one.','error');return false;}
@@ -2194,6 +2336,81 @@ function showVoteReceipt(candidateName,party,refNo,timestamp,voteHash=''){
 
 // GLOBALS
 let app;
+
+// ════════════════════════════════════════
+//  BACKEND INTEGRATION — when the Node backend is reachable (api.js
+//  health-check), all election data lives on the server. Falls back
+//  to the offline localStorage demo when it is not.
+// ════════════════════════════════════════
+const Backend={
+  ok(){return window._backendConnected===true&&typeof window.API!=='undefined';},
+  faceToken:null,   // short-lived token from server-side face verification
+  async refresh(){
+    if(!this.ok())return;
+    try{
+      const cs=await API.getCandidates();
+      app.candidates=cs.candidates.map(c=>({id:c.id,name:c.name,party:c.party,voteCount:c.voteCount,supported:c.approved!==false}));
+      app.candidatesCount=app.candidates.reduce((m,c)=>Math.max(m,c.id),0);
+      const st=await API.getElectionStatus();
+      app.electionStartTime=st.start?new Date(st.start):null;
+      app.electionEndTime=st.end?new Date(st.end):null;
+      try{const h=await API.health();app._serverVoterCount=h.users;}catch(e){}
+      app.updateUI();
+    }catch(e){console.warn('[backend] refresh failed:',e.message);}
+  },
+  async sendOTP(email){
+    const r=await API.sendOTP(email);
+    document.getElementById('otpSection').style.display='block';
+    document.getElementById('otpEmailUsed').textContent=email;
+    if(r.devOTP)showToast(`Dev mode (no SMTP configured): your OTP is ${r.devOTP}`,'info');
+    else showToast('OTP sent to your email — valid for 10 minutes','info');
+    return true;
+  },
+  async verifyOTP(email,code){
+    await API.verifyOTP(email,code);
+    app.otpStore.set(email.toLowerCase(),{otp:code,expiry:Date.now()+10*60*1000,verified:true});
+    showToast('Email verified successfully! ✓','success');
+    document.getElementById('otpVerifiedBadge').style.display='inline-flex';
+    return true;
+  },
+  async register(addr,name,email,descriptor,photoUrl){
+    await API.register(addr,name,email,descriptor,photoUrl||'');
+    return await API.login(addr);
+  },
+  async login(addr,role){
+    return await API.login(addr,role);
+  },
+  async verifyFace(descriptor,distances){
+    const r=await API.verifyFace(descriptor,distances);
+    this.faceToken=r.faceToken;
+    return r;
+  },
+  async castVote(candidateId){
+    const r=await API.castVote(candidateId,this.faceToken);
+    this.faceToken=null;
+    return r;
+  },
+  async addCandidate(name,party){const r=await API.addCandidate(name,party);await this.refresh();return r;},
+  async setTimes(startISO,endISO){const r=await API.setElectionTimes(startISO,endISO);await this.refresh();return r;},
+  async proposeResults(){const r=await API.proposeResults();await this.refresh();return r;},
+  async audit(){return await API.getAuditLog();}
+};
+document.addEventListener('DOMContentLoaded',()=>{
+  const t0=Date.now();
+  const iv=setInterval(()=>{
+    if(window._backendConnected===undefined&&Date.now()-t0<12000)return;
+    clearInterval(iv);
+    if(Backend.ok()){
+      // Live mode: the server is the source of truth for ballots, election
+      // window and audit data. The registeredUsers cache stays — it stores
+      // face descriptors locally for the scan UX between visits.
+      app.candidates=[];app.voters=new Set();app.auditLog=[];app.adminLogs=[];
+      app.candidatesCount=0;app.electionStartTime=null;app.electionEndTime=null;
+      showToast('Connected to ElectionChain backend — live mode','info');
+      Backend.refresh();
+    }
+  },250);
+});
 document.addEventListener('DOMContentLoaded',()=>{app=new ElectionChainApp();});
 function switchTab(t){app.switchTab(t);}
 function loginUser(){app.loginUser();}
